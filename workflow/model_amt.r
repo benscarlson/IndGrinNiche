@@ -6,9 +6,7 @@ spsm(library(amt))
 spsm(library(bencmisc))
 spsm(library(DBI))
 spsm(library(dplyr))
-#spsm(library(forcats))
 spsm(library(glue))
-#spsm(library(raster))
 spsm(library(readr))
 spsm(library(RSQLite))
 spsm(library(tidyr))
@@ -25,7 +23,6 @@ if(interactive()) {
   .pd <- getwd()
 }
 
-#pars <- loadParams(datName)
 message(glue('Reading data sets from {.pd}'))
 models <- read_csv(file.path(.pd,'models.csv'),col_types=cols()) %>%
   filter(as.logical(run))
