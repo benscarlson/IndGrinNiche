@@ -54,8 +54,6 @@ for(j in 1:nrow(models)) {
     select(niche_name,y,!!modvars) %>%
     mutate_at(.vars=scalevars,.funs=list(~as.vector(scale(.))))
 
-  #TODO: remove steps where not complete.cases, and also remove associated background points
-
   ptm <- proc.time()
     ssf2 <- ssf %>%
       group_by(niche_name) %>% 
