@@ -83,7 +83,7 @@ suppressWarnings(
     library(iterators)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 source(rd('src/funs/hv.r'))
 
 #---- Local parameters ----#

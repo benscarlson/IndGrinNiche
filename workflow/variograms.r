@@ -30,10 +30,10 @@ select <- dplyr::select
 filter <- dplyr::filter
 
 '
-Calculates population hypervolumes based on individual hypervolumes.
+Calculates and saves ctmm objects: telemetry, variogram, models.
 
 Usage:
-hvs_pop <dat> [--parMethod=<parMethod>] [--cores=<cores>] 
+variograms.r <dat> [--parMethod=<parMethod>] [--cores=<cores>] 
 
 Options:
 -h --help     Show this screen.

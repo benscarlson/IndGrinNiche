@@ -13,10 +13,10 @@
 |2020-03-31|Start moving core workflow scripts to ms1 project|
 |2020-04-02|Save global weighted cluster index and jaccard calculations to database|
 
-# Old notes
+# Notes
 
 * obs_trim.csv should contain all relevant filtering
-
+* Annotated dataset, with obs and bg /Users/benc/projects/whitestork/results/stpp_models/huj_eobs/data/obsbg_anno.csv
 * niche_set_vol.hv_job_name=5axes2000pts1_old has volumes that were made without setting distance factor
 
 # Technical Notes
@@ -24,5 +24,3 @@
 ## Database
 
 ### TODO
-
-* Update scripts to reflect table name change for niche_set_stats

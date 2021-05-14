@@ -3,17 +3,21 @@
 # ==== Breezy setup ====
 
 '
-Calculates nicheset level weighted clustering index
-sesid - can be a comma-seperated list of session ids
+Calculates nicheset level weighted clustering index.
+There needs to be more than one pair for the clustering metric to work.
 
 Usage:
-cluster_weighted.r <sesid> [-t] [--seed=<seed>]
+cluster_weighted.r <sesid> [-b] [-t] [--seed=<seed>]
 cluster_weighted.r (-h | --help)
+
+Parameters:
+sesid - can be a comma-separated list of session ids
 
 Options:
 -h --help     Show this screen.
 -v --version     Show version.
 -s --seed=<seed>  Random seed. Defaults to 5326 if not passed
+-b --rollback   If true, will rollback the transaction. Use for testing.
 -t --test         Indicates script is a test run, will not save output parameters or commit to git
 ' -> doc
 
@@ -25,12 +29,13 @@ isAbsolute <- function(path) {
 if(interactive()) {
   library(here)
 
-  .wd <- '~/projects/project_template/analysis'
+  .wd <- '~/projects/ms1/analysis/rev2/dist_env_test'
   .seed <- NULL
   .test <- TRUE
+  .rollback <- TRUE
   rd <- here
   
-  .sesid <- c('full_hvs','full_ci')
+  .sesid <- c('dist_env_test1')
   
 } else {
   library(docopt)
@@ -40,6 +45,7 @@ if(interactive()) {
   .wd <- getwd()
   .script <-  thisfile()
   .seed <- ag$seed
+  .rollback <- as.logical(ag$rollback)
   .test <- as.logical(ag$test)
   rd <- is_rstudio_project$make_fix_file(.script)
   
@@ -61,10 +67,10 @@ suppressWarnings(
     library(tnet)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 
 #---- Local parameters ----#
-.dbPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/database.db'
+.dbPF <- '~/projects/ms1/analysis/huj_eobs/data/database.db'
 .minOverlap <- 0.05
 .measure <- 'am' #c("am", "gm", "ma", "mi")
 
@@ -133,7 +139,7 @@ sql <- glue_sql(
 set clust_w = $clust_w
 where niche_set_stats_id = $niche_set_stats_id')
 
-message(glue('Inserting {nrow(cldat)} rows'))
+message(glue('Updating {nrow(cldat)} rows'))
 
 rs <- dbSendStatement(db, sql) #parameter names should match column names
 dbBind(rs,params=cldat %>% select(niche_set_stats_id,clust_w))
@@ -145,7 +151,7 @@ if(nrow(cldat) != rows) {
   dbDisconnect(db)
   stop('All rows did not update correctly. Transaction rolled back. Exiting script.')
 } else {
-  message(glue('Successfully inserted {rows} rows'))
+  message(glue('Successfully updated {rows} rows'))
 }
 
 #---- Finalize script ----#
@@ -176,8 +182,9 @@ if(!.test) {
   saveParams(.parPF)
 }
 
-if(.test) {
-  message('Rolling back transaction because this is a test run.')
+#Handle commit
+if(.rollback) {
+  message(glue('Rolling back transaction.'))
   dbRollback(db)
 } else {
   dbCommit(db)

@@ -1,11 +1,15 @@
 #!/usr/bin/env Rscript --vanilla
 
+#TODO: Make this more general. 
+#     * Allow passing output from miller to select rows from the command line
+#     * Match up values in the table and in the csv, so I only insert columns that are in the table and not extra columns in the csv
+#TODO: Do I need to know the pk column name, just to set it to NA? No need if these are rowid tables.
 '
 Loads csv output from hpc to the database.
 .import command in sqlite3 is very rudimentary so this is better
 
 Usage:
-load_hpc_csv.r <dat> <sesid> <table> [-t] [--seed=<seed>]
+load_hpc_csv.r <dat> <sesid> <table> [-b] [-t] [--seed=<seed>]
 load_hpc_csv.r (-h | --help)
 
 Options:
@@ -13,6 +17,7 @@ Options:
 -v --version     Show version.
 -s --seed=<seed>  Random seed. Defaults to 5326 if not passed
 -t --test         Indicates script is a test run, will not save output parameters or commit to git
+-b --rollback   If true, will rollback the transaction. Use for testing.
 ' -> doc
 
 isAbsolute <- function(path) {
@@ -40,6 +45,7 @@ if(interactive()) {
   .script <-  thisfile()
   .seed <- ag$seed
   .test <- as.logical(ag$test)
+  .rollback <- as.logical(ag$rollback)
   rd <- is_rstudio_project$make_fix_file(.script)
   
   .datPF <- ifelse(isAbsolute(ag$dat),ag$out,file.path(.wd,ag$dat))
@@ -61,10 +67,10 @@ suppressWarnings(
     library(RSQLite)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 
 #---- Local parameters ----#
-.dbPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/database.db'
+.dbPF <- '~/projects/ms1/analysis/huj_eobs/data/database.db'
 
 #---- Load control files ----#
 
@@ -110,8 +116,7 @@ nrows <- dat0 %>%
   dbAppendTable(db, .table, .)
 
 if(nrow(dat0)==nrows) {
-  message(glue('Successfully  Inserted {nrows} rows'))
-  dbCommit(db)
+  message(glue('Successfully inserted {nrows} rows'))
 } else {
   message(glue('Failed to insert {nrow(dat0)}'))
   dbRollback(db)
@@ -145,6 +150,14 @@ if(!.test) {
   #Save all parameters to csv for reproducibility
   #TODO: write this to a workflow database instead
   saveParams(.parPF)
+}
+
+#Handle commit
+if(.rollback) {
+  message(glue('Rolling back transaction.'))
+  dbRollback(db)
+} else {
+  dbCommit(db)
 }
 
 dbDisconnect(db)

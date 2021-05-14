@@ -22,11 +22,11 @@ spsm(library(lubridate))
 spsm(library(tidyverse))
 
 '
-Calculates population hypervolumes based on individual hypervolumes.
+Calculates akde for on the hpc.
 
 Usage:
-nmds_hv [--parMethod=<parMethod>] [--cores=<cores>] [--out=<out>]
-nmds_hv (-h | --help)
+akde.r [--parMethod=<parMethod>] [--cores=<cores>] [--out=<out>]
+akde.r (-h | --help)
 
 Options:
 -h --help     Show this screen.
@@ -37,7 +37,6 @@ Options:
 ' -> doc
 
 #---- parameters ----#
-#NOTE: script uses niche_sets.csv and niches.csv to determine which niches to run
 
 ag <- docopt(doc, version = '0.1\n')
 

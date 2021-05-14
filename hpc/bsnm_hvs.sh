@@ -8,5 +8,16 @@
 module load miniconda
 source activate parallelR3
 
-mpirun -n $n Rscript --vanilla $src/workflow/bsnm_hvs.r $dat $out $reps -b $bmode -r $sesid -p mpi -m $logs -t
+#TODO: I should handle other optional parameters in the same way as bmode and axes
+bmode=ci
 
+params=()
+[[ ! -z "$bmode" ]] && params+=("-b $bmode")
+[[ ! -z "$axes" ]] && params+=("-a $axes")
+
+opts="${params[@]}"
+
+echo mpirun -n $n Rscript --vanilla $src/workflow/bsnm_hvs.r $dat $out $reps -r $sesid $opts -p mpi -m $logs -t
+
+mpirun -n $n Rscript --vanilla $src/workflow/bsnm_hvs.r $dat $out $reps -r $sesid $opts -p mpi -m $logs -t
+#-b $bmode -a $axes 

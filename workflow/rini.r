@@ -10,7 +10,7 @@ Calculates individual and niche set rini
 sesid - can be a comma-seperated list of session ids
 
 Usage:
-rini.r <sesid> [-t] [--seed=<seed>]
+rini.r <sesid> [-b] [-t] [--seed=<seed>]
 rini.r (-h | --help)
 
 Options:
@@ -18,6 +18,7 @@ Options:
 -v --version     Show version.
 -s --seed=<seed>  Random seed. Defaults to 5326 if not passed
 -t --test         Indicates script is a test run, will not save output parameters or commit to git
+-b --rollback   If true, will rollback the transaction. Use for testing.
 ' -> doc
 
 isAbsolute <- function(path) {
@@ -43,6 +44,7 @@ if(interactive()) {
   .wd <- getwd()
   .script <-  thisfile()
   .seed <- ag$seed
+  .rollback <- as.logical(ag$rollback)
   .test <- as.logical(ag$test)
   rd <- is_rstudio_project$make_fix_file(.script)
   
@@ -63,10 +65,10 @@ suppressWarnings(
     library(RSQLite)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 
 #---- Local parameters ----#
-.dbPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/database.db'
+.dbPF <- '~/projects/ms1/analysis/huj_eobs/data/database.db'
 
 #---- Initialize database ----#
 db <- dbConnect(RSQLite::SQLite(), .dbPF)
@@ -179,8 +181,9 @@ if(!.test) {
   saveParams(.parPF)
 }
 
-if(.test) {
-  message('Rolling back transaction because this is a test run.')
+#Handle commit
+if(.rollback) {
+  message(glue('Rolling back transaction.'))
   dbRollback(db)
 } else {
   dbCommit(db)

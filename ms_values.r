@@ -3,7 +3,7 @@
 
 '
 Generates all values that are referenced in the ms
-Idea is to write these to csv, then somehow link to ms document (using fields?)
+In the long term, a good idea is to write these to csv, then somehow link to ms document (using fields?). Need to figure this out.
 
 Usage:
 ms_values.r <hvjob> <out> [--seed=<seed>] [-t]

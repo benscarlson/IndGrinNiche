@@ -3,10 +3,12 @@
 spsm <- suppressPackageStartupMessages
 
 spsm(library(amt))
-spsm(library(bencmisc))
+#spsm(library(bencmisc))
 spsm(library(DBI))
 spsm(library(dplyr))
+#spsm(library(forcats))
 spsm(library(glue))
+#spsm(library(raster))
 spsm(library(readr))
 spsm(library(RSQLite))
 spsm(library(tidyr))
@@ -14,19 +16,20 @@ spsm(library(tidyr))
 filter <- dplyr::filter
 select <- dplyr::select
 
-source('~/projects/rsf/src/scripts/funs.r')
+#source('~/projects/rsf/src/scripts/funs.r')
 
 #---- parameters ----
 if(interactive()) {
-  .pd <- '/Users/benc/projects/whitestork/results/stpp_models/huj_eobs'
+  .pd <- '/Users/benc/projects/ms1/analysis/huj_eobs'
 } else {
   .pd <- getwd()
 }
 
+#pars <- loadParams(datName)
 message(glue('Reading data sets from {.pd}'))
 models <- read_csv(file.path(.pd,'models.csv'),col_types=cols()) %>%
   filter(as.logical(run))
-niches <- read_csv(file.path(.pd,'niches.csv'),col_types=cols())
+niches <- read_csv(file.path(.pd,'ctfs/niches.csv'),col_types=cols())
 envs <- read_csv(file.path(.pd,'envs.csv'),col_types=cols())  %>%
   filter(as.logical(run))
 dat0 <- read_csv(file.path(.pd,'data/obsbg_anno.csv'),col_types=cols())
@@ -46,10 +49,28 @@ for(j in 1:nrow(models)) {
   modvars <- all.vars(f[[3]])
   scalevars <- modvars[modvars!='stratum']
   
+  #save the centering and scaling values for later use
+  #seems like there should be a more elegant way to put together this table
+  x <- dat0 %>% 
+    mutate(y=as.numeric(obs)) %>%
+    select(niche_name,y,!!modvars) 
+  m <- x %>% summarize(across(!!scalevars,mean,na.rm=TRUE))
+  s <- x %>% summarize(across(!!scalevars,sd,na.rm=TRUE))
+  
+  tibble(model=mod$short_name,
+         var=scalevars,
+         mean=as.numeric(m),
+         sd=as.numeric(s)) %>% 
+    write_csv(file.path(.pd,'zscale.csv'),append=TRUE)
+    
+  
+  #prep the data for the model
   ssf <- dat0 %>% 
     mutate(y=as.numeric(obs)) %>%
     select(niche_name,y,!!modvars) %>%
     mutate_at(.vars=scalevars,.funs=list(~as.vector(scale(.))))
+
+  #Modeling function will remove steps where not complete.cases, and also remove associated background points
 
   ptm <- proc.time()
     ssf2 <- ssf %>%

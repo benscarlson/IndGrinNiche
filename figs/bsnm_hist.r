@@ -28,17 +28,17 @@ isAbsolute <- function(path) {
 if(interactive()) {
   library(here)
   
-  .wd <- '~/projects/ms1/analysis/bsnm'
+  .wd <- '~/projects/ms1/analysis/rev2/null3_lbg15'
   .seed <- NULL
   .test <- TRUE
   rd <- here
   
-  .sesid <- c('full_hvs','full_ci','full_bg_buf')
-  #.sesid <- 'full_ci'
+  .sesid <- c('full_hvs','full_bg_buf','null3_lbg15')
+
   .mode <- 'spec'
-  .stat <- c('5axes2000pts1') #,color='red'
-  .labels <- c('Null','Sampling dist.','Background (buffer)')
-  .outPF <- file.path(.wd,glue('figs/{.mode}_null_ci_bg.pdf'))
+  .stat <- '5axes2000pts1' #,color='red'
+  .labels <- 1:3
+  .outPF <- file.path(.wd,glue('figs/null3_lbg15/a_spec_null3.pdf'))
   
 } else {
   library(docopt)
@@ -64,8 +64,6 @@ if(interactive()) {
 set.seed(.seed)
 t0 <- Sys.time()
 
-options(rgl.useNULL = TRUE) #hypervolume loads rgl, this makes sure it doesn't open x11 session
-
 source(rd('src/startup.r'))
 
 suppressWarnings(
@@ -74,17 +72,24 @@ suppressWarnings(
     library(RSQLite)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
-source(rd('src/funs/themes.r'))
+#Source all files in the auto load funs directory
+list.files(rd('src/funs/auto'),full.names=TRUE) %>%
+  walk(source)
 
 theme_set(theme_eda)
 
 #---- Local parameters ----
-.dbPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/database.db'
+.dbPF <- '~/projects/ms1/analysis/huj_eobs/data/database.db'
+
+metrics <- list(spec='spec',nested='nestedness',clust='clust_w')
 
 #---- Load control files ----#
+nsets <- read_csv(file.path(.wd,'ctfs/niche_sets.csv'),col_types=cols()) %>% 
+  filter(as.logical(run)) %>% select(-run)
 
 #---- Initialize database ----#
+invisible(assert_that(file.exists(.dbPF)))
+
 db <- dbConnect(RSQLite::SQLite(), .dbPF)
 invisible(assert_that(length(dbListTables(db))>0))
 
@@ -92,50 +97,32 @@ nsettb <- tbl(db,'niche_set_stats')
 
 #---- Load data ----#
 
-#TODO: can significanly streamline this code.
+gdat <- nsettb %>% 
+  filter(ses_id %in% .sesid & rep != 1) %>% #First rep always has unrandomized data, so don't pick that one
+  select(ses_id,rep,niche_set,value=!!metrics[.mode][[1]]) %>%
+  as_tibble %>%
+  inner_join(nsets %>% select(niche_set),by='niche_set')
+
+stdat <- nsettb %>%
+  filter(ses_id %in% .stat & (is.na(rep) | rep==1)) %>%
+  select(ses_id,rep,niche_set,value=!!metrics[.mode][[1]]) %>%
+  as_tibble %>%
+  inner_join(nsets %>% select(niche_set),by='niche_set') %>%
+  mutate(niche_set=factor(niche_set,levels=nsets$niche_set,labels=nsets$label))
+
+#TODO: I should combine xlab and metrics above into a list or dataframe
+#       and title should be passed into the script as a parameter
 if(.mode=='spec') {
    title <- '(a)'
    xlab <- 'Specialization'
-   
-   gdat <- nsettb %>% 
-     filter(ses_id %in% .sesid) %>%
-     mutate(value=1-rini) %>%
-     select(ses_id,rep,niche_set,value) %>%
-     as_tibble
-   
-   stdat <- nsettb %>%
-     filter(ses_id %in% .stat & (is.na(rep) | rep==1)) %>%
-     mutate(value=1-rini) %>%
-     select(ses_id,rep,niche_set,value) %>%
-     as_tibble
-   
 } else if(.mode=='nested') {
   title='(b)'
   xlab='Nestedness'
   
-  gdat <- nsettb %>% 
-    filter(ses_id %in% .sesid) %>%
-    select(ses_id,rep,niche_set,value=nestedness) %>%
-    as_tibble
-  
-  stdat <- nsettb %>%
-    filter(ses_id %in% .stat & (is.na(rep) | rep==1)) %>%
-    select(ses_id,rep,niche_set,value=nestedness) %>%
-    as_tibble
-  
 } else if(.mode=='clust') {
   title='(c)'
   xlab='Clustering'
-  
-  gdat <- nsettb %>% 
-    filter(ses_id %in% .sesid) %>%
-    select(ses_id,rep,niche_set,value=clust_w) %>%
-    as_tibble
-  
-  stdat <- nsettb %>%
-    filter(ses_id %in% .stat & (is.na(rep) | rep==1)) %>%
-    select(ses_id,rep,niche_set,value=clust_w) %>%
-    as_tibble
+
 }
 
 if(!is.null(.labels)) {
@@ -143,31 +130,18 @@ if(!is.null(.labels)) {
     mutate(ses_id=factor(ses_id,levels=.sesid,labels=.labels))
 }
 
-#first <- gdat %>% filter(rep==1 & ses_id=='full_hvs')
-
-#I think this is how to calculate bootstrap p-value
-# nul <- d %>% filter(rep!=1 & niche_set=='beuster-2015') %>% pluck('value')
-# st <- d %>% filter(rep==1 & niche_set=='beuster-2015') %>% pluck('value')
-# length(nul[nul >= st])/length(nul) # proportion of nul values that are >= the statistic
-
 p <- gdat %>%
-  filter(rep!=1) %>%
+    filter(rep!=1) %>%
+    mutate(niche_set=factor(niche_set,levels=nsets$niche_set,labels=nsets$label)) %>%
   ggplot(aes(x=value,color=ses_id,fill=ses_id)) +
-  geom_histogram(alpha=0.4) + #aes(y=stat(count) / sum(count))
+  geom_histogram(alpha=0.4) +
   geom_vline(data=stdat,mapping=aes(xintercept=value),color='red',linetype='longdash') +
-  #geom_density(..scaled..) +
-  #lims(x=c(0,1.5)) +
-  #scale_color_manual(values=c('#373F51','#60AFFF'),aesthetics=c('color','fill')) +
   facet_wrap(vars(niche_set)) +
-  #facet_grid(vars(niche_set),vars(metric),scales='free') +
   labs(
     x=xlab,y='Frequency',
-    color='Null distribution for:',
-    fill='Null distribution for:',
-    title=title
-    #subtitle='2000 points per individual niche, 100 randomized repetitions',
-    #caption='Non-randomized value (red line) and distribution for randomized data (density)'
-    )
+    color='Null model',
+    fill='Null model',
+    title=title)
 
 dir.create(dirname(.outPF),recursive=TRUE,showWarnings=FALSE)
 

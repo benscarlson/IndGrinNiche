@@ -1,8 +1,6 @@
 #!/usr/bin/env Rscript --vanilla
 # chmod 744 script_template.r #Use to make executable
 
-#TODO: update column  names to match database.
-
 # ==== Breezy setup ====
 
 '
@@ -85,7 +83,7 @@ suppressWarnings(
     library(iterators)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 source(rd('src/funs/hv.r'))
 
 #---- Local parameters ----#

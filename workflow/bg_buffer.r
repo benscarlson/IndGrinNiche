@@ -3,10 +3,16 @@
 # ==== Breezy setup ====
 
 '
-Uses buffer approach to generate backgrounds
+Uses buffer approach to generate backgrounds. 
+Splits temporal extent into 14 day slices
+Samples 10 * the number of points found in each time slice.
+
+dat: point dataset with dist2nest column. Used to figure out the size of the buffers
+out: name of the output file
+cdat: file with centroid (nest/median) for each individual/year
 
 Usage:
-bg_buffer.r <dat> <out> [-t] [--seed=<seed>]
+bg_buffer.r <dat> <out> <cdat> [-t] [--seed=<seed>]
 bg_buffer.r (-h | --help)
 
 Options:
@@ -16,21 +22,18 @@ Options:
 -t --test         Indicates script is a test run, will not save output parameters or commit to git
 ' -> doc
 
-isAbsolute <- function(path) {
-  grepl("^(/|[A-Za-z]:|\\\\|~)", path)
-}
-
 #---- Input Parameters ----#
 if(interactive()) {
   library(here)
 
-  .wd <- '~/projects/ms1/analysis/bsnm'
+  .wd <- '~/projects/ms1/analysis/rev2/null3_poc3'
   .seed <- NULL
   .test <- TRUE
   rd <- here
   
+  .cdatPF <- file.path(.wd,'data/nest_center.csv')
   .datPF <- rd('data/derived/obs_anno.csv')
-  .outPF <- file.path(.wd,'data/full_bg_buf.csv')
+  .outPF <- file.path(.wd,'data/bg_buf.csv')
   
 } else {
   library(docopt)
@@ -43,8 +46,11 @@ if(interactive()) {
   .test <- as.logical(ag$test)
   rd <- is_rstudio_project$make_fix_file(.script)
   
-  .datPF <- ifelse(isAbsolute(ag$dat),ag$dat,file.path(.wd,ag$dat))
-  .outPF <- ifelse(isAbsolute(ag$out),ag$out,file.path(.wd,ag$out))
+  source(rd('src/funs/input_parse.r'))
+  
+  .cdatPF <- makePath(ag$cdat)
+  .datPF <- makePath(ag$dat)
+  .outPF <- makePath(ag$out)
 }
 
 #---- Initialize Environment ----#
@@ -57,18 +63,16 @@ source(rd('src/startup.r'))
 
 suppressWarnings(
   suppressPackageStartupMessages({
-    library(DBI)
-    library(RSQLite)
     library(sf)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 
 #---- Local parameters ----#
-.dbPF <- '~/projects/whitestork/src/db/db.sqlite'
 .ndays <- 14
 .width <- glue('{.ndays} days')
-.medlocPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/median_location.csv'
+.flatproj <- 3035
+.nx <- 10
 
 #---- Load control files ----#
 nsets <- read_csv(file.path(.wd,'ctfs/niche_sets.csv'),col_types=cols()) %>% 
@@ -78,32 +82,24 @@ niches <- read_csv(file.path(.wd,'ctfs/niches.csv'),col_types=cols()) %>%
   inner_join(nsets %>% select(niche_set),by='niche_set')
 
 #---- Initialize database ----#
-db <- dbConnect(RSQLite::SQLite(), .dbPF)
-invisible(assert_that(length(dbListTables(db))>0))
-
-nestTb <- tbl(db,'stork_breeding_data')
 
 #---- Load data ----#
-dat0 <- read_csv(.datPF,col_types=cols()) %>%
-  inner_join(niches %>% select(niche_set,niche_name),by='niche_name')
-medlocs <- read_csv(.medlocPF,col_types=cols()) 
+message('Loading data...')
+dat0 <- read_csv(.datPF,col_types=cols())
+
+#FOR TESTING ONLY!!!!
+# dat00 <- read_csv(.datPF,col_types=cols())
+# dat0 <- dat00 %>%
+#   inner_join(niches %>% select(niche_set,niche_name),by='niche_name') %>% 
+#   group_by(niche_name) %>% sample_n(500) %>% ungroup
+
+nests <- read_csv(.cdatPF,col_types=cols()) 
 
 #====
 
 #---- Perform analysis ----#
 
-#Need to get central locations for individuals that don't have nest locations (usually non-breeding)
-nests <- niches %>%
-  left_join(
-    nestTb %>% select(individual_id,year,nest_lon,nest_lat) %>% as_tibble,
-    by=c('individual_id','year')
-  ) %>% 
-  left_join(medlocs,by='niche_name') %>% 
-  mutate(
-    nest_lon=ifelse(is.na(nest_lon),lon,nest_lon),
-    nest_lat=ifelse(is.na(nest_lat),lat,nest_lat)) %>%
-  select(niche_name,nest_lon,nest_lat)
-  
+#This section uses observed values for dist2nest to derive 95% quantiles for movement over a 14 day period
 dat95 <- dat0 %>%
   mutate(start_date=cut(as.Date(timestamp),.width)) %>%
   group_by(niche_name,start_date) %>%
@@ -114,11 +110,12 @@ dat95 <- dat0 %>%
 
 #Note: since I used obs_anno.csv, dist2nest calculation has distances for non-breeding 
 #   individuals. These are based on distances from the center of their movements.
+# 
 buf <- dat95 %>%
   inner_join(niches %>% select(niche_name,individual_id,year),by='niche_name') %>%
   inner_join(nests, by='niche_name') %>%
   st_as_sf(coords=c('nest_lon','nest_lat'),crs=4326) %>%
-  st_transform(3035) %>% 
+  st_transform(.flatproj) %>% 
   mutate(geometry=st_buffer(geometry,d95_m))
 
 
@@ -127,38 +124,36 @@ buf <- dat95 %>%
 #   ggplot() +
 #   geom_sf(aes(color=niche_name),fill=NA)
 
-message('Generating random background points...')
+message('Generating random background points. Takes awhile...')
 t1 <- Sys.time()
 
-bg <- buf %>%
-  mutate(pts=map2(geometry,num,~{
+#Taking num*10 random points in each time window. This mimics how the available distribution is created when doing an SSF.
+ptsbg <- buf %>%
+  mutate(pts=map2(geometry,num*.nx,~{
     st_sample(.x,.y)
   })) %>%
   unnest(pts) %>%
-  mutate(pts=st_sfc(pts))
+  mutate(pts=st_sfc(pts)) %>% 
+  st_set_geometry(.$pts) %>% #change the geometry. Note reference using the full dataframe context
+  st_set_crs(.flatproj) %>%
+  select(niche_name,start_date,end_date) #remember geometry columns are sticky
 
 message(glue('Complete in {diffmin(t1)} minutes'))
 
 #Sanity test
-invisible(assert_that(sum(buf$num)==nrow(bg)))
+invisible(assert_that(sum(buf$num)*.nx==nrow(ptsbg)))
 
 #Can't handle many points, just use to test a few buffers
 # ggplot(bg) +
 #   geom_sf(aes(color=bin),fill=NA) +
 #   geom_sf(aes(color=bin,geometry=pts))
 
-#Clean up
-ptsbg <- bg %>% 
-  st_set_geometry(bg$pts) %>% #change the geometry
-  st_set_crs(3035) %>%
-  select(niche_name,start_date,end_date) %>% #remember geometry columns are sticky
-  st_transform(crs=4326)
-
 #Convert to tibble
 datbg <- ptsbg %>%
-  st_set_geometry(NULL) %>%
+  st_transform(crs=4326) %>%
   bind_cols(
-    ptsbg %>% st_coordinates %>% as_tibble) %>%
+    st_sf(.) %>% st_coordinates %>% as_tibble) %>%
+  st_set_geometry(NULL) %>%
   rename(lon=X,lat=Y)
 
 #randomly assign days to points based on start, end date of bins
@@ -176,6 +171,7 @@ datbgt <- datbg %>%
   arrange(niche_name,timestamp)
 
 #---- Save output ---#
+message(glue('Saving to {.outPF}'))
 dir.create(dirname(.outPF),recursive=TRUE,showWarnings=FALSE)
 
 datbgt %>% write_csv(.outPF)
@@ -207,17 +203,5 @@ if(!.test) {
   #TODO: write this to a workflow database instead
   saveParams(.parPF)
 }
-
-#If transaction is not active, then this code will fail
-# currently no way to test for active transaction: https://github.com/r-dbi/DBI/issues/316
-# use try() but should come up with a way that does not produce an error message
-# if(.test) {
-#   message('Rolling back transaction because this is a test run.')
-#   try(dbRollback(db))
-# } else {
-#   try(dbCommit(db))
-# }
-
-dbDisconnect(db)
 
 message(glue('Script complete in {diffmin(t0)} minutes'))

@@ -26,12 +26,12 @@ isAbsolute <- function(path) {
 if(interactive()) {
   library(here)
 
-  .wd <- '~/projects/project_template/analysis'
+  .wd <- '~/projects/ms1/analysis/rev2/null3_full'
   .seed <- NULL
   .test <- TRUE
   rd <- here
   
-  .sesid <- c('full_hvs','full_bg_buf')
+  .sesid <- c('null3') #null3_full
   .stat <- '5axes2000pts1'
   
 } else {
@@ -63,10 +63,10 @@ suppressWarnings(
     library(RSQLite)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 
 #---- Local parameters ----#
-.dbPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/database.db'
+.dbPF <- '~/projects/ms1/analysis/huj_eobs/data/database.db'
 
 #---- Load control files ----#
 
@@ -96,8 +96,8 @@ dat <- nsettb %>%
   pivot_longer(cols=c(spec,nestedness,clust_w),names_to='metric') %>%
   arrange(dist_ses_id,niche_set,desc(metric))
 
-#This has the non-randomized values computed from the data
-#NOTE: Currently this only works for one sesid. not sure if multiple sesids here even makes sense
+#This has the observed statistic as calculated from the data
+#The observed statistic should be a single sesid. not sure if multiple sesids here even makes sense
 stdat <- nsettb %>%
   filter(ses_id == .stat & (is.na(rep) | rep==1)) %>%
   select(stat_ses_id=ses_id,niche_set,spec,nestedness,clust_w) %>%
@@ -105,21 +105,15 @@ stdat <- nsettb %>%
   pivot_longer(cols=c(spec,nestedness,clust_w),names_to='metric') %>%
   arrange(niche_set,desc(metric))
 
+#https://stat.ethz.ch/pipermail/r-help/2012-March/305368.html
+#https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/ecdf
 qdat <- dat %>%
   nest(data=value) %>%
   inner_join(stdat,by=c('niche_set','metric')) %>%
   mutate(quantile=map2_dbl(data,value,~{ecdf(.x$value)(.y)})) %>%
   select(niche_set,metric,dist_ses_id,stat_ses_id,quantile) %>%
   pivot_wider(names_from=metric,values_from=quantile,names_prefix='q_')
-
-#https://stat.ethz.ch/pipermail/r-help/2012-March/305368.html
-#https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/ecdf
-# x <- gdat %>% filter(ses_id=='full_bg_buf' & niche_set=='loburg-2013') %>% pluck('value')
-# st <- stdat %>% filter(niche_set=='loburg-2013') %>% pluck('value')
-# 1-mean(x <= st) #Can use this approach using mean, or ecdf
-# ecdf(x)(st)
   
-
 #---- Save output ---#
 message('Saving to database...')
 qdat %>% 

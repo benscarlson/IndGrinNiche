@@ -1,23 +1,28 @@
 #!/usr/bin/env Rscript --vanilla
-# chmod 744 script_template.r #Use to make executable
-
-#TODO: change col names to match database
-#TODO: 
 
 # ==== Breezy setup ====
 
 '
-Template
-
 Usage:
-bsnm_hvs.r <dat> <out> <reps> [--bmode=<bmode>] [--sesid=<sesid>] [--seed=<seed>] [--parMethod=<parMethod>] [--cores=<cores>] [--mpilogs=<mpilogs>] [-t] 
+bsnm_hvs.r <dat> <out> <reps> [--bmode=<bmode>] [--sesid=<sesid>] [--axes=<axes>] [--seed=<seed>] [--parMethod=<parMethod>] [--cores=<cores>] [--mpilogs=<mpilogs>] [-t] 
 bsnm_hvs.r (-h | --help)
+
+Control files:
+ctfs/niches.csv
+ctfs/niche_set.csv
+
+Parameters:
+dat: path to csv file. 
+  should have niche_set, niche_name, and one column for each niche axis.
+  should be a scaled dataset.
+out: path to output directory
 
 Options:
 -h --help     Show this screen.
 -v --version     Show version.
--b --bmode=<bmode>  Bootstrap sampling mode. null resamples from full niche set. ci resamples from each niche
+-b --bmode=<bmode>  Bootstrap sampling mode. "null" resamples from full niche set. "ci" resamples from each niche. "none" does not resample. Defaults to "none"
 -r --sesid=<sesid>  Id that uniquely identifies a script run
+-a --axes=<axes> Run on a subset of niche axes. If not supplied defaults to all niche axes in dat
 -s --seed=<seed>  Random seed. Defaults to 5326 if not passed
 -t --test         Indicates script is a test run, will not save output parameters or commit to git
 -p --parMethod=<parMethod>  Either <mpi | mc>. If not passed in, script will run sequentially.
@@ -28,7 +33,6 @@ Options:
 
 #---- Input Parameters ----#
 
-
 isAbsolute <- function(path) {
   grepl("^(/|[A-Za-z]:|\\\\|~)", path)
 }
@@ -36,17 +40,18 @@ isAbsolute <- function(path) {
 if(interactive()) {
   library(here)
 
-  .wd <- '~/projects/ms1/analysis/bsnm'
+  .wd <- '~/projects/ms1/analysis/rev2/dist_env_test'
   .seed <- NULL
   .test <- TRUE
-  .sesid <- 'full_bg_buf'
+
   rd <- here
   
-  .reps <- 2
-  .bmode <- 'ci'
+  .sesid <- 'test1'
+  .reps <- 1
+  #.bmode <- 'ci'
+  .axes <- c('dist2urban','dist2forest')
   
-  #.datPF <- '~/projects/ms1/data/derived/obs_anno_100.csv'
-  .datPF <- file.path(.wd,'data/full_bg_buf_2k.csv')
+  .datPF <- '~/projects/ms1/data/derived/obs_anno_100_full.csv'
   .outP <- file.path(.wd,.sesid)
   
   .parMethod <- NULL
@@ -56,20 +61,22 @@ if(interactive()) {
   library(rprojroot)
 
   ag <- docopt(doc, version = '0.1\n')
+  
   .wd <- getwd()
   .script <-  thisfile()
-  .sesid <- ag$sesid
+
   .seed <- ag$seed
   .test <- as.logical(ag$test)
   rd <- is_rstudio_project$make_fix_file(.script)
   
-  #.npts <- as.integer(ag$npts)
+  .sesid <- ag$sesid
   .reps <- as.integer(ag$reps)
-  #.axes <- trimws(unlist(strsplit(ag$axes,',')))
-  .bmode <- ag$bmode
+
+  .bmode <- ifelse(is.null(ag$bmode),'none',ag$bmode)
+  .axes <- switch(is.null(ag$axes)+1,trimws(unlist(strsplit(ag$axes,','))),ag$axes)
   .parMethod <- ag$parMethod
   .cores <- ag$cores
-  
+
   .datPF <- ifelse(isAbsolute(ag$dat),ag$dat,file.path(.wd,ag$dat))
   .outP <- ifelse(isAbsolute(ag$out),ag$out,file.path(.wd,ag$out))
   
@@ -78,8 +85,7 @@ if(interactive()) {
 }
 
 #---- Initialize Environment ----#
-# Then, I need to permute the ids of the subsample to calculate the null
-# TODO: I should so a distribution where I pick different subsamples but don't permute!
+
 .seed <- ifelse(is.null(.seed),5326,as.numeric(.seed)) 
 
 set.seed(.seed)
@@ -96,19 +102,16 @@ suppressWarnings(
     library(iterators)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
-source(rd('src/funs/themes.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
 source(rd('src/funs/hv.r'))
 
-theme_set(theme_eda)
-
 #---- Local parameters ----#
-.outPF <- file.path(.wd,.sesid,'niche_stats.csv')
-.statusPF <- file.path(.wd,.sesid,'status.csv')  
+.outPF <- file.path(.outP,'niche_stats.csv')
+.statusPF <- file.path(.outP,'status.csv')
+
 #---- Files and directories ----#
 
 dir.create(.outP,showWarnings=FALSE,recursive=TRUE)
-dir.create(dirname(.outPF),showWarnings=FALSE,recursive=TRUE)
 
 # Niche-level stats
 tibble(ses_id=character(), 
@@ -123,8 +126,8 @@ nsets <- read_csv(file.path(.wd,'ctfs/niche_sets.csv'),col_types=cols()) %>%
   filter(as.logical(run)) %>% select(-run)
 niches <- read_csv(file.path(.wd,'ctfs/niches.csv'),col_types=cols()) %>% 
   filter(as.logical(run)) %>% select(-run) %>%
-  inner_join(nsets %>% select(niche_set),by='niche_set') %>%
-  mutate(niche_id=row_number()) #need a niche_id to make matrix for clust_w
+  inner_join(nsets %>% select(niche_set),by='niche_set') #%>%
+  #mutate(niche_id=row_number()) #need a niche_id to make matrix for clust_w
 
 #---- Initialize database ----#
 
@@ -132,6 +135,12 @@ niches <- read_csv(file.path(.wd,'ctfs/niches.csv'),col_types=cols()) %>%
 message('Loading data...')
 dat0 <- read_csv(.datPF,col_types=cols()) %>%
   inner_join(niches %>% select(niche_set,niche_name),by=c('niche_set','niche_name'))
+
+#Subset the number of axes is required
+if(length(.axes)>0) {
+  dat0 <- dat0 %>% select(niche_set,niche_name,one_of(.axes))
+}
+
 #====
 
 #need to know the number of points to select for each niche, since it can be less than .npts
@@ -183,15 +192,13 @@ foreach(j=icount(.reps),.combine='rbind') %mypar% {
   message(glue('Starting niche {niche$niche_name} rep {j}'))
   hvPF <- file.path(.outP,niche$niche_set,glue('rep{j}_{niche$niche_name}.rds'))
   dir.create(dirname(hvPF),showWarnings=FALSE,recursive=TRUE)
-  
-  # bmode==null. Sample with replacement from the full niche set
-  # bmode==ci. Sample with replacement from the niche
-  # But don't resample on first repetition
+
+  # Never resample on first repetition
   
   #In rare cases, bandwidth can be zero, causing the script to fail.
   # Try resample three times before giving up.
   for(a in 1:3) {
-    if(j == 1) {
+    if(j == 1 | .bmode=='none') {
       message(glue('Niche {niche$niche_name} rep {j} does not have random selection'))
       nicheDat <- dat0 %>% filter(niche_name==niche$niche_name)
     } else if(.bmode=='null') {

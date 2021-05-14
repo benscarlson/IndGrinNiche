@@ -34,6 +34,10 @@ Options:
 #Note docopt initializes parameters that are not passed in to NULL
 ag <- docopt(doc, version = '0.1\n')
 
+isAbsolute <- function(path) {
+  grepl("^(/|[A-Za-z]:|\\\\|~)", path)
+}
+
 if(interactive()) {
   .pd <- '~/projects/ms1/analysis/backgrounds'
   .annoPF <- 'data/bg_2wk_lbg2015_anno.csv'
@@ -47,7 +51,7 @@ if(interactive()) {
   .npts <- as.integer(ag$npts)
   .axes <- trimws(unlist(strsplit(ag$axes,',')))
   .parMethod <- ifelse(is.null(ag$parMethod),'none',ag$parMethod) #need to set value b/c NULL will fail in if statement
-  .outPF <- ag$out
+  .outPF <- ifelse(isAbsolute(ag$out),ag$out,file.path(.wd,ag$out))
 }
 
 set.seed(594)
@@ -68,7 +72,10 @@ message('Preparing data...')
 if('obs' %in% names(dat0)) {
   dat0 <- dat0 %>% filter(obs)
 }
-#sub-sample each niche
+
+#Sub-sample each niche
+
+#First prep and scale data
 datGrp <- dat0  %>%
   inner_join(niches %>% select(niche_set,niche_name),by='niche_name') %>%
   select(niche_set,niche_name,one_of(.axes)) %>%

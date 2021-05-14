@@ -12,6 +12,7 @@
 #   So, if I have 1, use that. If I know animal did not breed, use center of distribution (#2).
 #   If I don't have any information (#3) can use nestr to differentiate breeding/non-breeding to get #1 or #2
 
+#IDEA: Pass in a dataframe of locations, and data frame of nest location
 spsm <- suppressPackageStartupMessages
 
 #spsm(library(bencmisc))
@@ -40,7 +41,8 @@ if(interactive()) { #if executing from rstudio
 pars <- loadParams(.pd)
 
 #---- load data ----
-niches <- read_csv(file.path(.pd,'niches.csv'),col_type=cols()) %>% filter(as.logical(run))
+niches <- read_csv(file.path(.pd,'niches.csv'),col_type=cols()) %>% 
+  filter(as.logical(run))
 dat0 <- read_csv(.datPF,col_type=cols())
 datRaw0 <- read_csv(file.path(.pd,'data','dat.csv'))
 outliers <- read_csv(file.path(.pd,'outliers.csv'),col_types=cols()) %>%
@@ -125,7 +127,7 @@ datxy <- dat %>%
   sfc_as_cols(names=c('lon','lat')) %>%
   st_transform(crs=pars$flatProjCRS) %>%
   sfc_as_cols(names=c('x','y')) %>% #make columns of flat x,y values
-  st_set_geometry(NULL)  #%>% #this is now a dataframe with nest x and y cols
+  st_set_geometry(NULL)  #%>% #this is now a dataframe with lon, lat cols
   #select(timestamp,lon,lat,niche_name,everything()) #TODO: might not have to worry abut htis
   
 datDists <- datxy %>%
