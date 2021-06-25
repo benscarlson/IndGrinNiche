@@ -1,4 +1,4 @@
-plotSpec <- function(pop,inddat,aesdat,cidat) {
+plotSpec <- function(pop,inddat,aesdat) { #,cidat
   #inddat <- inddf$nind[[1]]
   #pop <- inddf$population[[1]]
   inddat$year <- factor(inddat$year)
@@ -11,14 +11,14 @@ plotSpec <- function(pop,inddat,aesdat,cidat) {
     geom_line(data=inddat, alpha=0.8, #linetype='dashed',
               mapping=aes(x=year,y=spec,group=short_name, color=short_name)) +
     geom_line(data=setdat,mapping=aes(x=year,y=spec,group=1),size=1.3) +
-    geom_errorbar(data=cidat, aes(x=factor(year), ymin=ci_low, ymax=ci_high), width=.1) + #,position=position_dodge(0.05)
+    #geom_errorbar(data=cidat, aes(x=factor(year), ymin=ci_low, ymax=ci_high), width=.1) + #,position=position_dodge(0.05)
     scale_y_continuous(limits=c(0,1)) +
     scale_color_manual(values=cols) +
     guides(color='none') +
     ggtitle(str_to_title(pop))
 }
 
-plotNested <- function(pop,pwdat,cidat) {
+plotNested <- function(pop,pwdat) { #,cidat
   #pwdat <- pwdf$npw[[1]]
   
   pwdat$year <- factor(pwdat$year)
@@ -31,7 +31,7 @@ plotNested <- function(pop,pwdat,cidat) {
     geom_line(data=pwdat, alpha=0.6, #linetype='dashed',
               mapping=aes(x=year,y=nestedness,group=pair, color=pair)) +
     geom_line(data=setdat,mapping=aes(x=year,y=nestedness,group=1),size=1.3) +
-    geom_errorbar(data=cidat, aes(x=factor(year), ymin=ci_low, ymax=ci_high), width=.1) +
+    #geom_errorbar(data=cidat, aes(x=factor(year), ymin=ci_low, ymax=ci_high), width=.1) +
     scale_y_continuous(limits=c(0,1)) +
     scale_color_grey() +
     guides(color='none')

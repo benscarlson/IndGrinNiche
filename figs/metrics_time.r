@@ -23,14 +23,13 @@ Options:
 if(interactive()) {
   library(here)
   
-  .wd <- '~/projects/whitestork/results/stpp_models/huj_eobs'
-  .script <- 'src/figs/ms/metrics_time.r'
+  .wd <- '~/projects/ms1/analysis/huj_eobs'
   .seed <- NULL
   .test <- TRUE
   rd <- here
   
   .hvjob <- '5axes2000pts1'
-  .outPF <- file.path(.wd,'figs/ms/metrics_time_test.pdf')
+  #.outPF <- file.path(.wd,'figs/ms/metrics_time_test.pdf')
 
 } else {
   library(docopt)
@@ -66,12 +65,12 @@ suppressWarnings(
 source(rd('src/funs/funs.r'))
 source(rd('src/funs/row_panel.r'))
 source(rd('src/figs/metrics_time_funs.r'))
-source(rd('src/funs/themes.r'))
+source(rd('src/funs/auto/themes.r'))
 theme_set(theme_ms)
 
 #---- Parameters ----
-.dbPF <- '~/projects/whitestork/results/stpp_models/huj_eobs/data/database.db'
-.sesidCI <- 'full_ci'
+.dbPF <- '~/projects/ms1/analysis/huj_eobs/data/database.db'
+#.sesidCI <- 'full_ci'
 
 #---- Initialize database ----#
 db <- DBI::dbConnect(RSQLite::SQLite(), .dbPF)
@@ -80,7 +79,7 @@ invisible(assert_that(length(dbListTables(db))>0))
 nind <- tbl(db,'niche_stats') %>% filter(ses_id==.hvjob)
 nset <- tbl(db,'niche_set_stats') %>% filter(ses_id==.hvjob)
 npw <- tbl(db,'pairwise') %>% filter(ses_id==.hvjob)
-citb <- tbl(db,'metric_ci') %>% filter(ses_id==.sesidCI)
+#citb <- tbl(db,'metric_ci') %>% filter(ses_id==.sesidCI)
 indTb <- loadIndivtb()
 
 #---- Load data ----#
@@ -112,15 +111,15 @@ aesdf <- niches %>%
   nest(aesdat=-population)
 
 #Setup CI data
-cidf <- citb %>% 
-  as_tibble %>%
-  inner_join(
-    niches %>%
-      group_by(niche_set) %>%
-      summarize(year=unique(year),population=unique(population)), 
-    by='niche_set') %>% 
-  select(-ses_id,-niche_set) %>%
-  nest(cidat=-c(metric,population))
+# cidf <- citb %>% 
+#   as_tibble %>%
+#   inner_join(
+#     niches %>%
+#       group_by(niche_set) %>%
+#       summarize(year=unique(year),population=unique(population)), 
+#     by='niche_set') %>% 
+#   select(-ses_id,-niche_set) %>%
+#   nest(cidat=-c(metric,population))
 
 #--
 #-- Specialization metric
@@ -132,10 +131,10 @@ gginddf <- nind %>%
   nest(nind=-population) %>%
   arrange(population) %>%
   inner_join(aesdf,by='population') %>%
-  inner_join(
-    cidf %>% filter(metric=='spec') %>% select(-metric),
-    by='population') %>%
-  mutate(gg=pmap(list(population,nind,aesdat,cidat),plotSpec))
+  # inner_join(
+  #   cidf %>% filter(metric=='spec') %>% select(-metric),
+  #   by='population') %>%
+  mutate(gg=pmap(list(population,nind,aesdat),plotSpec)) #,cidat
 
 #inddf$aesdat[[1]]
 #gginddf$gg[[2]]
@@ -158,10 +157,10 @@ ggpwdf <- npw %>%
   mutate(pair=paste(short_name1,short_name2,sep='-')) %>%
   nest(npw=-population) %>%
   arrange(population) %>%
-  inner_join(
-    cidf %>% filter(metric=='nestedness') %>% select(-metric),
-    by='population') %>%
-  mutate(gg=pmap(list(population,npw,cidat),plotNested))
+  # inner_join(
+  #   cidf %>% filter(metric=='nestedness') %>% select(-metric),
+  #   by='population') %>%
+  mutate(gg=pmap(list(population,npw),plotNested)) #,cidat
 
 #ggpwdf$gg[[1]]
 
@@ -169,7 +168,6 @@ ggpwdf <- npw %>%
 #-- Clustering metric ----#
 #--
 
-#NOTE: error bars do not make sense here b/c so little variation
 #TODO: ideally year should be stored in niche set file, not niches file
 cldf <- nset %>% select(niche_set,clust_w) %>%
   as_tibble %>%
@@ -196,6 +194,11 @@ clrow[[1]] <- clrow[[1]] + ggtitle(glue('c'))
 plist <- c(specrow,nestrow,clrow)
 p <- wrap_plots(plist,nrow=3,ncol=3) +
   plot_layout(heights=c(2.5,2.5,1))
+
+#---- Save output ---#
+message(glue('Saving to {.outPF}'))
+
+dir.create(dirname(.outPF),recursive=TRUE,showWarnings=FALSE)
 
 h=9; w=9
 if(fext(.outPF)=='pdf') {

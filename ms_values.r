@@ -20,7 +20,7 @@ Options:
 if(interactive()) {
   library(here)
   
-  .wd <- '~/projects/whitestork/results/stpp_models/huj_eobs'
+  .wd <- '~/projects/ms1/analysis/huj_eobs'
   .script <- 'src/ms_values.r' #Currently executing script
   .seed <- NULL
   .test <- TRUE
@@ -50,10 +50,12 @@ t0 <- Sys.time()
 
 source(rd('src/startup.r'))
 
-spsm(library(DBI))
-spsm(library(RSQLite))
-
-spsm(library(sf))
+suppressWarnings(
+  suppressPackageStartupMessages({
+    library(DBI)
+    library(RSQLite)
+    library(sf)
+  }))
 
 source(rd('src/funs/funs.r'))
 
@@ -73,13 +75,16 @@ reptb <- tbl(db,'rpt') %>% filter(hvjob==.hvjob,mod==.mod,rpt_mod==.rptmod)
 refdb <- dbConnect(RSQLite::SQLite(), .refdbPF)
 breed <- tbl(refdb,'stork_breeding_data')
 
-nsets <- read_csv(file.path(.wd,'niche_sets.csv'),col_types=cols()) %>% 
+nsets <- read_csv(file.path(.wd,'ctfs/niche_sets.csv'),col_types=cols()) %>% 
   filter(as.logical(run)) %>% select(-run)
-niches <- read_csv(file.path(.wd,'niches.csv'),col_types=cols()) %>% 
+niches <- read_csv(file.path(.wd,'ctfs/niches.csv'),col_types=cols()) %>% 
   filter(as.logical(run)) %>% select(-run) %>%
   inner_join(nsets %>% select(niche_set),by='niche_set')
 
 dat0 <- read_csv(file.path(.wd,'data/obsbg_anno.csv'),col_types=cols())
+
+fran <- read_csv(file.path('~/projects/whitestork/data/derived/shay/franzmitters.csv'), 
+                 col_types=cols())
 
 #---- Numbers referenced in ms ----#
 
@@ -158,6 +163,58 @@ nrow(obstrm0)
 
 #-- Figure 3 caption --#
 niches %>% filter(year==.year) %>% nrow #Num indivs in specified year
+
+#---------------------------#
+#---- Reporting summary ----#
+#---------------------------#
+
+#-- Version info
+R.version.string
+
+tibble(pkgs=c('amt','ctmm','hypervolume', 'rptR', 'tnet')) %>%
+  mutate(
+    version=map_chr(pkgs,~{packageDescription(.x)$Version}),
+    str=glue('{pkgs} ({version})')
+  ) %>%
+  pull('str') %>%
+  paste(collapse=', ')
+
+#Shell
+#gdal-config --version
+
+#-- Sex distribution
+fran %>% select(individual_id,sex) %>% arrange(individual_id) %>% View
+
+indx <- fran %>% 
+  select(individual_id,sex) %>% 
+  mutate(sex=ifelse(sex=='?',NA,sex)) %>% 
+  filter(!is.na(sex)) %>%
+  distinct(individual_id, sex)
+
+#Distribution of sexes
+niches %>%
+  distinct(individual_id) %>%
+  left_join(indx,by='individual_id') %>% View
+  group_by(sex) %>%
+  summarize(num=n())
+
+
+niches %>% distinct(individual_id) %>% nrow #
+
+#--- Number of individuals per population
+niches %>% distinct(individual_id,population) %>% group_by(population) %>% summarize(num=n())
+
+#-- Spatial Extent
+
+hr0 <- st_read('~/projects/ms1/analysis/huj_eobs/ctmm/akde_contour/contours.shp') 
+
+hr0 %>%
+  filter(est=='est') %>%
+  rename(niche_name=n_name) %>%
+  inner_join(niches %>% select(niche_name,population), by='niche_name') %>%
+  nest(data=-population) %>%
+  mutate(bbox = map(data,~{.x %>% st_bbox %>% st_as_sfc})) %>%
+  mutate(area_km2 = map_dbl(bbox,st_area)/1e3^2)
 
 
 #---- Finalize script ----#

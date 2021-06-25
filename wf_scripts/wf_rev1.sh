@@ -1,6 +1,6 @@
 
 
-wd=~/projects/whitestork/results/stpp_models/huj_eobs
+wd=~/projects/ms1/analysis/huj_eobs
 src=~/projects/ms1/src
 
 cd $wd
@@ -247,7 +247,7 @@ $src/workflow/cluster_weighted.r $sesid
 $src/workflow/quantiles.r full_hvs,full_bg_buf 5axes2000pts1
 #Confidence intervals of distributions
 $src/workflow/metric_ci.r full_hvs,full_bg_buf,full_ci
-
+#see poc_p-values.r for p-values.
 
 #-------------------#
 #---- Figure S3 ----#

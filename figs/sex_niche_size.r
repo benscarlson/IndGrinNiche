@@ -24,7 +24,7 @@ isAbsolute <- function(path) {
 if(interactive()) {
   library(here)
 
-  .wd <- '~/projects/whitestork/results/stpp_models/huj_eobs'
+  .wd <- '~/projects/ms1/analysis/huj_eobs'
   .seed <- NULL
   .test <- TRUE
   rd <- here
@@ -64,13 +64,13 @@ suppressWarnings(
     library(RSQLite)
   }))
 
-source(rd('src/funs/breezy_funs.r'))
-source(rd('src/funs/themes.r'))
+source(rd('src/funs/auto/breezy_funs.r'))
+source(rd('src/funs/auto/themes.r'))
 theme_set(theme_eda)
 
 #---- Local parameters ----#
 .dbPF <- file.path(.wd,"data/database.db")
-.dbBrdPF <- file.path('~/projects/whitestork/src/db/db.sqlite')
+#.dbBrdPF <- file.path('~/projects/whitestork/src/db/db.sqlite')
 
 #---- Load control files ----#
 nsets <- read_csv(file.path(.wd,'ctfs/niche_sets.csv'),col_types=cols()) %>% 
@@ -85,10 +85,13 @@ invisible(assert_that(length(dbListTables(db))>0))
 
 nind <- tbl(db,'niche_stats') %>% filter(ses_id==.sesid) %>% as_tibble
 
-db2 <- dbConnect(RSQLite::SQLite(), .dbBrdPF)
-invisible(assert_that(length(dbListTables(db2))>0))
+#db2 <- dbConnect(RSQLite::SQLite(), .dbBrdPF)
+#invisible(assert_that(length(dbListTables(db2))>0))
 
-ind <- tbl(db2,'individual') %>% as_tibble
+
+#ind <- tbl(db2,'individual') %>% as_tibble
+fran <- read_csv(file.path('~/projects/whitestork/data/derived/shay/franzmitters.csv'), 
+                 col_types=cols())
 
 #---- Load data ----#
 #message('Loading data...')
@@ -99,20 +102,35 @@ ind <- tbl(db2,'individual') %>% as_tibble
 
 #---- Perform analysis ----#
 
+#fran file is strange b/c it sex is missing for individuals in some years but not others
+#need to consolidate this information
+indx <- fran %>% 
+  select(individual_id,sex) %>% 
+  mutate(sex=ifelse(sex=='?',NA,sex)) %>% 
+  filter(!is.na(sex)) %>%
+  distinct(individual_id, sex)
+
 gdat <- niches %>%
-  inner_join(ind %>% select(individual_id,sex),by='individual_id') %>% 
-  mutate(sex=ifelse(trimws(sex)=='',NA,sex)) %>%
+  inner_join(indx,by='individual_id') %>%
   inner_join(
     nind %>% select(niche_name,niche_vol),
     by='niche_name')
 
 p <- gdat %>%
     filter(!is.na(sex)) %>%
-    mutate(sex=factor(sex,levels=c('f','m'),labels=c('F','M'))) %>%
+    #group_by(individual_id,sex) %>%
+    #summarize(niche_vol=mean(niche_vol)) %>%
+    mutate(sex=factor(sex,levels=c('F','M'))) %>%
   ggplot(aes(x=sex,y=log(niche_vol))) +
     geom_boxplot() +
   labs(x='Sex',
        y='log of niche volume')
+
+# Counts of sample size
+# gdat %>% filter(!is.na(sex)) #n=115
+# gdat %>% filter(!is.na(sex)) %>%
+#   group_by(individual_id,sex) %>%
+#   summarize(num=n()) %>% nrow #n=44
 
 #---- Save output ---#
 dir.create(dirname(.outPF),recursive=TRUE,showWarnings=FALSE)
@@ -154,6 +172,5 @@ if(!.test) {
 }
 
 dbDisconnect(db)
-dbDisconnect(db2)
 
 message(glue('Script complete in {diffmin(t0)} minutes'))

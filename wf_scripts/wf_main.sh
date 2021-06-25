@@ -7,7 +7,7 @@ datName=huj_eobs
 srcP=~/projects/ms1/src
 reportP=$srcP/reports
 scriptsP=$srcP/scripts
-reportOutP=~/projects/whitestork/results/stpp_models/$datName/reports
+reportOutP=~/projects/ms1/analysis/$datName/reports
 
 
 msfigP=~/projects/ms1/docs/ms/v14/figs

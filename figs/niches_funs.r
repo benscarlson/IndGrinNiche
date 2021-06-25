@@ -8,7 +8,7 @@ plotMap <- function(tag,pop,polys,cen,zoom,aesdat) { #tag,
   #   calc_zoom + 1
   # print(zoom)
   
-  lvs <- aesdat %>% arrange(desc(indiv_vol)) %>% pluck('niche_name')
+  lvs <- aesdat %>% arrange(desc(niche_vol)) %>% pluck('niche_name')
   
   cols <- aesdat %>% select(niche_name,color) %>% deframe #make a named vector
   
@@ -51,7 +51,7 @@ plotMDS <- function(gdat,aesdat) {
   # gdat <- mdsgg$data[[1]]
   # aesdat <- mdsgg$aesdat[[1]]
 
-  lvs <- aesdat %>% arrange(desc(indiv_vol)) %>% pluck('niche_name')
+  lvs <- aesdat %>% arrange(desc(niche_vol)) %>% pluck('niche_name')
   
   cols <- aesdat %>% select(niche_name,color) %>% deframe #make a named vector
   #tl <- ifelse(is.na(tag),str_to_title(pop),glue('{tag} {str_to_title(pop)}'))

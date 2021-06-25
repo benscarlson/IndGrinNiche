@@ -35,9 +35,8 @@ Options:
 #---- Input Parameters ----
 if(interactive()) {
   library(here)
-  .wd <- '~/projects/whitestork/results/stpp_models/huj_eobs'
+  .wd <- '~/projects/ms1/analysis/huj_eobs'
   .test <- TRUE
-  .script <- 'src/figs/niches.r' #Currently executing script
   .seed <- NULL
   rd <- here
   
@@ -45,7 +44,7 @@ if(interactive()) {
   .year <- 2015
   .hrP <- file.path(.wd,'ctmm/akde_contour/contours.shp')
   .zoom <- c(11,10,10)
-  .outPF <- file.path(.wd,'figs/ms/niches',glue('niches_{.year}.pdf'))
+  #.outPF <- file.path(.wd,'figs/ms/niches',glue('niches_{.year}.pdf'))
 } else {
   library(docopt)
   library(rprojroot)
@@ -73,20 +72,23 @@ t0 <- Sys.time()
 
 source(rd('src/startup.r'))
 
-spsm(library(bencmisc)) #has getMapRetry
-spsm(library(ctmm))
-spsm(library(ggmap))
-spsm(library(ggsn))
-spsm(library(patchwork))
-spsm(library(DBI))
-spsm(library(ggConvexHull))
-spsm(library(patchwork))
-spsm(library(RSQLite))
-spsm(library(stringr))
-spsm(library(sf))
+suppressWarnings(
+  suppressPackageStartupMessages({
+    library(bencmisc) #has getMapRetry
+    library(ctmm)
+    library(ggmap)
+    library(ggsn)
+    library(patchwork)
+    library(DBI)
+    library(ggConvexHull)
+    library(patchwork)
+    library(RSQLite)
+    library(stringr)
+    library(sf)
+}))
 
-source(rd('src/funs/funs.r'))
-source(rd('src/funs/themes.r'))
+source(rd('src/funs/funs.r')) #has legacy funs.r
+source(rd('src/funs/auto/themes.r'))
 source(rd('src/figs/niches_funs.r'))
 theme_set(theme_ms)
 
@@ -98,16 +100,16 @@ theme_set(theme_ms)
 #---- load data ----#
 
 db <- dbConnect(RSQLite::SQLite(), .dbPF)
-nind <- tbl(db,'indiv_stats') %>% filter(hv_job==.hvjob)
+nind <- tbl(db,'niche_stats') %>% filter(ses_id==.hvjob)
 #nset <- tbl(db,'niche_set_vol') %>% filter(hv_job_name==.hvjob)
-npw <- tbl(db,'pairwise') %>% filter(hv_job==.hvjob)
-nss <- tbl(db,'niche_set_stats') %>% filter(hv_job==.hvjob)
+npw <- tbl(db,'pairwise') %>% filter(ses_id==.hvjob)
+nss <- tbl(db,'niche_set_stats') %>% filter(ses_id==.hvjob)
 #indTb <- loadIndivtb()
 
 pal <- read_csv(file.path(.wd,'figs/ms/indiv_pal.csv'),col_types=cols())
-nsets <- read_csv(file.path(.wd,'niche_sets.csv'),col_types=cols()) %>% 
+nsets <- read_csv(file.path(.wd,'ctfs/niche_sets.csv'),col_types=cols()) %>% 
   filter(as.logical(run)) %>% select(-run)
-niches <- read_csv(file.path(.wd,'niches.csv'),col_types=cols()) %>% 
+niches <- read_csv(file.path(.wd,'ctfs/niches.csv'),col_types=cols()) %>% 
   filter(as.logical(run)) %>% select(-run) %>%
   inner_join(nsets %>% select(niche_set),by='niche_set') %>%
   filter(year==.year)
@@ -126,9 +128,9 @@ polys0 <- st_read(.hrP,quiet=TRUE) %>%
 #   mutate(order=row_number())
 aesdf <- niches %>%
   inner_join(pal,by='individual_id') %>%
-  inner_join(nind %>% select(niche_name,indiv_vol) %>% as_tibble,
+  inner_join(nind %>% select(niche_name,niche_vol) %>% as_tibble,
              by='niche_name') %>%
-  arrange(niche_set,indiv_vol) %>%
+  arrange(niche_set,niche_vol) %>%
   nest(aesdat=-c(niche_set,population))
 
 #---
@@ -217,7 +219,7 @@ gdat <- bind_rows(spec,pw) %>%
   mutate(metric=factor(metric,levels=c('nestedness','spec'),
                        labels=c('Nestedness','Specialization')))
 
-#TODO: verify 1-mean(rini) is same as mean(1-rini)
+
 nsdf <- nss %>% as_tibble %>%
   inner_join(niches %>% distinct(niche_set,population),by='niche_set') %>%
   mutate(spec=1-rini) %>%
@@ -294,6 +296,11 @@ if(isTRUE(.mode =='supp')) {
     theme = theme(plot.title = element_text(size = 24)))
 }
 
+#---- Save output ---#
+message(glue('Saving to {.outPF}'))
+
+dir.create(dirname(.outPF),recursive=TRUE,showWarnings=FALSE)
+
 h=10; w=9
 if(fext(.outPF)=='pdf') {
   ggsave(.outPF,plot=p,height=h,width=w,device=cairo_pdf) #save pdf
@@ -305,8 +312,8 @@ if(fext(.outPF)=='pdf') {
 
 #Save all parameters to csv for reproducibility
 if(!.test) {
-  spsm(library(git2r))
-  spsm(library(uuid))
+  library(git2r)
+  library(uuid)
   
   .runid <- UUIDgenerate()
   .parPF <- file.path(.wd,"run_params.csv")
